@@ -1,5 +1,6 @@
 # This is a sample Python script.
 import datetime
+import os
 from urllib.request import urlopen, Request
 import requests
 import numpy as np
@@ -14,7 +15,7 @@ from scipy.optimize import minimize
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.trading.requests import MarketOrderRequest
-
+import os
 
 import pandas_datareader.data as we
 
@@ -28,9 +29,12 @@ import pandas_datareader.data as we
 def genStocks():
     finviz_url = "https://finviz.com/quote.ashx?t="
 
-    tickers = ['ASPI', 'ALAR', 'ANF', 'ML', 'VST', 'GCT', 'DAVE', 'APEI', 'VRT', 'DTST', 'CLS', 'CRDL', 'BMA', 'VITL',
-               'ORN', 'REAX', 'TPC', 'CAMT', 'AEYE', 'CVNA']
-
+    tickers = ['EUDA', 'ALAR', 'ANF', 'VITL', 'ADMA', 'APEI', 'AMSC', 'RNA', 'AEYE', 'CLS', 'ML', 'DAVE', 'EVER', 'FTAI',
+               'WGS', 'DYN', 'GCT', 'SMR', 'MGNX', 'CURV', 'FIP']
+    count =0
+    for i in tickers:
+        count+=1
+    print(count)
     news_tables = {}
     for ticker in tickers:
         url = finviz_url + ticker
@@ -201,8 +205,6 @@ def BlackLittermanOptimization(symbols, sentiments):
     s = risk_models.CovarianceShrinkage(portfolio).ledoit_wolf()
 
     delta = black_litterman.market_implied_risk_aversion(market_prices)
-    sns.heatmap(s.corr(), cmap='coolwarm')
-    market_prior = black_litterman.market_implied_prior_returns(mcaps, delta, s)
     viewDict = {
         symbols[0]: sentiments[0],
         symbols[1]: sentiments[1],
@@ -228,8 +230,9 @@ def BlackLittermanOptimization(symbols, sentiments):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
-    monteClient = TradingClient("PK0XC7P60PSKG3NSWR3O", "7Po2zGwtwlafXSJtDavTtDzV7qlGnQ68p6scSlnp")
-    blackLitClient = TradingClient("PKMPBF2A6DN6H74H6KM7","tX245QMKjhUrzdciUUYMWs5R9nEELK6aWu2z4B55" )
+    monteClient = TradingClient(os.environ['MONTEKEY'], os.environ['MONTESECR'])
+    blackLitClient = TradingClient(os.environ['BLACKKEY'],os.environ['BLACKSECR'] )
+    markowClient = TradingClient(os.environ['MARKOWKEY'],os.environ['MARKOWSECR'])
     stocks, vals = genStocks()
     bidPrices = []
     amounts = []
@@ -242,10 +245,10 @@ if __name__ == '__main__':
     headers = {"accept": "application/json"}
 
     response = requests.get(url, headers=headers)
+    print(stocks)
 
-    print(response.text)
     for stock in stocks:
-
+        print("12344")
         account = monteClient.get_account()
         preC = account.buying_power
         pre = float(preC)
@@ -267,64 +270,49 @@ if __name__ == '__main__':
                 bidPrices.append(cost)
                 break;
             ctr+=1
-        '''
-            split = monteCarloOptimization(stocks)
-            for i in range(len(stocks)):
-                val = totCash * split[i]
-                amounts.append( val // bidPrices[i])
-        
-            for i in range(len(amounts)):
-                marketOrder =MarketOrderRequest(symbol=stocks[i], qty=amounts[i], side=OrderSide.BUY,
+
+    totCash = float(account.cash)
+    split = monteCarloOptimization(stocks)
+    print(len(bidPrices))
+    for i in range(len(bidPrices)):
+        val = totCash * split[i]
+        print(val)
+        amounts.append( val // bidPrices[i])
+    print(sum(amounts))
+    for i in range(len(amounts)):
+        marketOrder =MarketOrderRequest(symbol=stocks[i], qty=amounts[i], side=OrderSide.BUY,
                                                                          time_in_force=TimeInForce.DAY)
-                monteClient.submit_order(
-                    order_data=marketOrder
-                )
-        '''
-
-        # split = markowitzOptimization2(stocks)
-        # for i in range(len(stocks)):
-        #     val = totCash * split[i]
-        #     amounts[i] = val // bidPrices[i]
-        #
-        # for i in range(len(amounts)):
-        #     marketOrder = alpaca.trading.requests.MarketOrderRequest(symbol=stocks[i], qty=amounts[i], side=OrderSide.BUY, time_in_force=TimeInForce.DAY)
-        #     markowClient.submit_order(
-        #         order_data=marketOrder
-        #     )
-        #
-
-
-
-        split = BlackLittermanOptimization(stocks,vals )
-        for stock in stocks:
-            account = blackLitClient.get_account()
-            preC = account.buying_power
-            pre = float(preC)
-            marketOrder = MarketOrderRequest(symbol=stock, qty=1, side=OrderSide.BUY,
-                                             time_in_force=TimeInForce.DAY)
-            blackLitClient.submit_order(
+        monteClient.submit_order(
                 order_data=marketOrder
             )
-            ctr = 0;
-            while True:
-                print( f"Run {ctr}:")
-                acc = blackLitClient.get_account()
-                postC = acc.buying_power
-                post = float(postC)
-                if post - pre == 0:
-                    time.sleep(300)
-                else:
-                    cost = pre-post
-                    bidPrices.append(cost)
-                    break;
-                ctr+=1
+
+    amounts.clear()
+    split = markowitzOptimization2(stocks)
+    account = markowClient.get_account()
+    totCash = float(account.cash)
+    for i in range(len(bidPrices)):
+        val = totCash * split[i]
+        amounts.append( val // bidPrices[i])
+
+    for i in range(len(amounts)):
+        marketOrder = MarketOrderRequest(symbol=stocks[i], qty=amounts[i], side=OrderSide.BUY, time_in_force=TimeInForce.DAY)
+        markowClient.submit_order(
+                     order_data=marketOrder
+                )
+
+
+
+        amounts.clear()
+        split = BlackLittermanOptimization(stocks,vals )
+        account = blackLitClient.get_account()
+        totCash = float(account.cash)
         ints = []
         print(split)
         for i in split:
             ints.append(split[i])
 
         print(ints)
-        for i in range(5):
+        for i in range(len(bidPrices)):
             val = totCash * ints[i]
             amounts.append(val // bidPrices[i])
         for i in range(len(amounts)):
@@ -333,10 +321,6 @@ if __name__ == '__main__':
             order_data=marketOrder
         )
 
-
-    #FIND 5 HIGHEST SENTIMENT VALUES
-
-    ##Optimizer Section
 
 
 
